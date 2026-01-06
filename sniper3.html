@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sniper & Co. | Tactical Terminal</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- PDF Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #09090b; color: #fafafa; }
+        .panel { background-color: #18181b; border: 1px solid #27272a; }
+        .accent-bg { background-color: #166534; } 
+        .accent-bg:hover { background-color: #15803d; }
+        .payment-option { border: 2px solid #27272a; cursor: pointer; transition: 0.2s; }
+        .payment-option.active { border-color: #22c55e; background: #064e3b; }
+        
+        /* Tactical Sticky Total Bar */
+        .total-bar {
+            background: linear-gradient(to right, #052e16, #14532d);
+            border-top: 2px solid #22c55e;
+            box-shadow: 0 -10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        .loader {
+            border: 3px solid #18181b;
+            border-top: 3px solid #22c55e;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @media print { .no-print { display: none !important; } }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <nav class="h-14 border-b border-zinc-800 flex items-center justify-between px-6 bg-zinc-900/50 no-print">
+        <div class="flex items-center gap-4">
+            <span class="font-bold tracking-tighter text-xl text-green-500">SNIPER & CO.</span>
+            <span class="text-[10px] text-zinc-500 uppercase tracking-widest border border-zinc-700 px-2 rounded">Combat Billing Unit</span>
+        </div>
+        <div id="clock" class="text-xs font-mono text-zinc-500"></div>
+    </nav>
+
+    <main class="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+        
+        <!-- COLUMN 1: PRODUCTS -->
+        <section class="lg:col-span-5 border-r border-zinc-800 flex flex-col p-4 no-print">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xs font-bold uppercase text-zinc-500">Inventory</h2>
+                <input type="text" id="search" placeholder="Search SKU..." class="bg-zinc-950 border border-zinc-800 p-1.5 rounded text-[11px] w-1/2 outline-none focus:border-green-500">
+            </div>
+            <div id="product-grid" class="flex-1 overflow-y-auto grid grid-cols-2 gap-4 pr-2">
+                <!-- Products via JS -->
+            </div>
+        </section>
+
+        <!-- COLUMN 2: ACTIVE CART & REAL-TIME TOTAL -->
+        <section class="lg:col-span-3 border-r border-zinc-800 flex flex-col bg-zinc-900/20 no-print">
+            <div class="p-4 border-b border-zinc-800 font-bold text-xs uppercase text-zinc-500">Live_Order_Stream</div>
+            
+            <div id="cart-items" class="flex-1 overflow-y-auto p-4 space-y-3">
+                <!-- Items appear here -->
+            </div>
+
+            <!-- PERMANENT BOTTOM TOTAL BAR -->
+            <div class="total-bar p-5 space-y-1">
+                <div class="flex justify-between text-[10px] uppercase text-green-200/70 font-bold">
+                    <span>Current Subtotal</span>
+                    <span id="cart-subtotal">₹0.00</span>
+                </div>
+                <div class="flex justify-between items-end">
+                    <span class="text-xs font-bold text-white uppercase tracking-tighter">Amount Due</span>
+                    <span id="cart-total" class="text-3xl font-black text-white leading-none">₹0.00</span>
+                </div>
+                <p class="text-[8px] text-green-400/50 mt-2 uppercase tracking-widest">Awaiting Transaction Authorization...</p>
+            </div>
+        </section>
+
+        <!-- COLUMN 3: CUSTOMER & GATEWAY -->
+        <section class="lg:col-span-4 flex flex-col overflow-y-auto p-6 space-y-6 no-print">
+            <div>
+                <h3 class="text-[10px] font-bold text-zinc-500 uppercase mb-3">Deployment Details</h3>
+                <div class="space-y-3">
+                    <input type="text" id="c-name" placeholder="Client Name *" class="w-full bg-zinc-950 border border-zinc-800 p-2 text-sm rounded focus:border-green-600 outline-none">
+                    <input type="text" id="c-phone" placeholder="Mobile Number *" class="w-full bg-zinc-950 border border-zinc-800 p-2 text-sm rounded focus:border-green-600 outline-none">
+                </div>
+            </div>
+
+            <div>
+                <h3 class="text-[10px] font-bold text-zinc-500 uppercase mb-3">Select Gateway</h3>
+                <div class="grid grid-cols-3 gap-2">
+                    <div onclick="setPayment('Cash')" id="pay-Cash" class="payment-option p-3 rounded text-center active">
+                        <p class="text-[10px] font-bold">CASH</p>
+                    </div>
+                    <div onclick="setPayment('UPI')" id="pay-UPI" class="payment-option p-3 rounded text-center">
+                        <p class="text-[10px] font-bold">UPI</p>
+                    </div>
+                    <div onclick="setPayment('Card')" id="pay-Card" class="payment-option p-3 rounded text-center">
+                        <p class="text-[10px] font-bold">CARD</p>
+                    </div>
+                </div>
+            </div>
+
+            <button id="gen-btn" disabled onclick="processPayment()" class="w-full accent-bg py-5 rounded font-black text-xs tracking-[0.2em] shadow-lg shadow-green-900/20 disabled:opacity-10">
+                COMPLETE TRANSACTION
+            </button>
+
+            <div class="pt-4 opacity-30">
+                <h3 class="text-[9px] font-bold uppercase mb-2">Recent Success Logs</h3>
+                <div id="history-list" class="space-y-2 text-[9px]"></div>
+            </div>
+        </section>
+    </main>
+
+    <!-- LOADING GATEWAY OVERLAY -->
+    <div id="pay-loader" class="fixed inset-0 bg-black/95 z-[60] hidden flex flex-col items-center justify-center">
+        <div class="loader mb-4"></div>
+        <p class="text-green-500 font-mono text-xs tracking-widest uppercase animate-pulse" id="pay-status">Verifying Secure Gateway...</p>
+    </div>
+
+    <!-- INVOICE MODAL -->
+    <div id="modal" class="fixed inset-0 bg-black/95 z-50 hidden flex items-center justify-center p-4">
+        <div id="invoice-capture" class="bg-white text-zinc-900 w-full max-w-xl p-10 shadow-2xl">
+            <div class="flex justify-between items-start border-b-4 border-zinc-900 pb-6 mb-6">
+                <div>
+                    <h1 class="text-3xl font-black italic tracking-tighter">SNIPER & CO.</h1>
+                    <p class="text-[9px] uppercase tracking-widest text-zinc-400">Tactical Gear Logistics</p>
+                </div>
+                <div class="text-right">
+                    <h2 class="font-bold text-xl" id="m-inv-id">#INV-000</h2>
+                    <p class="text-xs" id="m-date"></p>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4 mb-8 text-xs">
+                <div>
+                    <p class="text-[9px] font-bold text-zinc-400 uppercase">Billing To</p>
+                    <p class="font-bold text-lg leading-tight" id="m-c-name"></p>
+                    <p id="m-c-phone"></p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[9px] font-bold text-zinc-400 uppercase">Method</p>
+                    <p class="font-bold text-lg" id="m-pay-method"></p>
+                    <p class="text-green-600 font-bold">SECURE_PAYMENT_VERIFIED</p>
+                </div>
+            </div>
+
+            <table class="w-full text-xs mb-8">
+                <thead class="border-b-2 border-zinc-100 uppercase font-bold text-zinc-400">
+                    <tr><th class="py-3 text-left">Item Description</th><th class="text-center">Qty</th><th class="text-right">Total</th></tr>
+                </thead>
+                <tbody id="m-items"></tbody>
+            </table>
+
+            <div class="border-t-4 border-zinc-900 pt-4 text-right">
+                <p class="text-[10px] font-bold uppercase text-zinc-400">Total Paid (INR)</p>
+                <h2 class="text-4xl font-black" id="m-total">₹0.00</h2>
+            </div>
+            
+            <div class="mt-10 flex gap-4 no-print">
+                <button onclick="downloadPDF()" class="flex-1 bg-zinc-900 text-white py-4 rounded-sm font-bold text-xs uppercase tracking-widest hover:bg-black transition">Download PDF</button>
+                <button onclick="closeModal()" class="flex-1 bg-zinc-100 py-4 rounded-sm font-bold text-xs uppercase tracking-widest hover:bg-zinc-200 transition">Reset Terminal</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 10 Products | Price 1000 | Custom Tactical Images
+        const products = Array.from({ length: 10 }, (_, i) => ({
+            id: i + 1,
+            name: `Product ${i + 1}`,
+            sku: `SN-T-${i + 1}`,
+            price: 1000,
+            image: `https://placehold.co/400x250/18181b/22c55e?text=UNIT+${i + 1}`
+        }));
+
+        // Persist Cart across refreshes
+        let cart = JSON.parse(localStorage.getItem('active_cart')) || [];
+        let selectedPayment = 'Cash';
+        let history = JSON.parse(localStorage.getItem('sniper_logs')) || [];
+
+        function init() {
+            renderProducts();
+            updateCart();
+            renderHistory();
+            setInterval(() => {
+                document.getElementById('clock').innerText = new Date().toLocaleString();
+                validate();
+            }, 1000);
+        }
+
+        function renderProducts() {
+            const grid = document.getElementById('product-grid');
+            grid.innerHTML = products.map(p => `
+                <div class="panel rounded-sm overflow-hidden flex flex-col group border-zinc-800/50">
+                    <img src="${p.image}" class="w-full h-20 object-cover opacity-40 group-hover:opacity-100 transition duration-500">
+                    <div class="p-3">
+                        <div class="flex justify-between items-start">
+                            <h3 class="text-[11px] font-bold uppercase tracking-tight">${p.name}</h3>
+                            <span class="text-[8px] text-zinc-600 font-mono">${p.sku}</span>
+                        </div>
+                        <div class="flex justify-between items-center mt-3">
+                            <span class="text-green-500 font-bold text-sm">₹${p.price}</span>
+                            <button onclick="addToCart(${p.id})" class="bg-zinc-800 text-white px-3 py-1 rounded text-[10px] font-bold hover:bg-green-600 transition">+</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function addToCart(id) {
+            const p = products.find(x => x.id === id);
+            const exists = cart.find(x => x.id === id);
+            if (exists) exists.qty++; else cart.push({...p, qty: 1});
+            saveCart();
+            updateCart();
+        }
+
+        function removeItem(id) {
+            cart = cart.filter(x => x.id !== id);
+            saveCart();
+            updateCart();
+        }
+
+        function saveCart() {
+            localStorage.setItem('active_cart', JSON.stringify(cart));
+        }
+
+        function updateCart() {
+            const container = document.getElementById('cart-items');
+            const total = cart.reduce((acc, i) => acc + (i.price * i.qty), 0);
+            
+            // Update the "Show Below" Persistent Total
+            document.getElementById('cart-subtotal').innerText = `₹${total.toLocaleString('en-IN')}`;
+            document.getElementById('cart-total').innerText = `₹${total.toLocaleString('en-IN')}`;
+            
+            if(cart.length === 0) {
+                container.innerHTML = `<div class="h-full flex items-center justify-center text-zinc-700 text-[10px] uppercase tracking-widest italic">Awaiting Product Scan...</div>`;
+                return;
+            }
+
+            container.innerHTML = cart.map(i => `
+                <div class="flex justify-between items-center bg-zinc-800/20 p-2 border-l-2 border-green-600 rounded-sm">
+                    <div class="flex-1">
+                        <span class="text-[11px] font-bold text-zinc-300 uppercase">${i.name}</span>
+                        <div class="text-[9px] text-zinc-600">UNIT_PRICE: ₹${i.price}</div>
+                    </div>
+                    <div class="flex items-center gap-4">
+                        <span class="text-[11px] font-mono text-green-500">x${i.qty}</span>
+                        <span class="text-[11px] font-bold w-12 text-right">₹${i.price * i.qty}</span>
+                        <button onclick="removeItem(${i.id})" class="text-zinc-700 hover:text-red-500 text-[10px] ml-2">×</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function setPayment(method) {
+            selectedPayment = method;
+            document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('active'));
+            document.getElementById(`pay-${method}`).classList.add('active');
+        }
+
+        function validate() {
+            const n = document.getElementById('c-name').value;
+            const p = document.getElementById('c-phone').value;
+            document.getElementById('gen-btn').disabled = !(n.length > 2 && p.length > 8 && cart.length > 0);
+        }
+
+        function processPayment() {
+            const loader = document.getElementById('pay-loader');
+            const status = document.getElementById('pay-status');
+            loader.classList.remove('hidden');
+            
+            setTimeout(() => { status.innerText = "AUTHENTICATING GATEWAY..."; }, 800);
+            setTimeout(() => { status.innerText = "TRANSFERRING FUNDS..."; }, 1600);
+            setTimeout(() => { 
+                loader.classList.add('hidden');
+                showInvoice();
+            }, 2400);
+        }
+
+        function showInvoice() {
+            const total = cart.reduce((acc, i) => acc + (i.price * i.qty), 0);
+            document.getElementById('m-inv-id').innerText = `#T-INV-${Math.floor(Math.random()*90000)+10000}`;
+            document.getElementById('m-date').innerText = new Date().toLocaleDateString() + ' ' + new Date().toLocaleTimeString();
+            document.getElementById('m-c-name').innerText = document.getElementById('c-name').value;
+            document.getElementById('m-c-phone').innerText = document.getElementById('c-phone').value;
+            document.getElementById('m-pay-method').innerText = selectedPayment.toUpperCase();
+            document.getElementById('m-total').innerText = `₹${total.toLocaleString('en-IN')}`;
+            
+            document.getElementById('m-items').innerHTML = cart.map(i => `
+                <tr class="border-b border-zinc-100">
+                    <td class="py-4 font-medium">${i.name} [${i.sku}]</td>
+                    <td class="text-center font-bold">${i.qty}</td>
+                    <td class="text-right font-black">₹${(i.price * i.qty).toLocaleString('en-IN')}</td>
+                </tr>
+            `).join('');
+
+            document.getElementById('modal').classList.remove('hidden');
+        }
+
+        function downloadPDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF('p', 'pt', 'a4');
+            const element = document.getElementById('invoice-capture');
+            
+            html2canvas(element, { scale: 3 }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const pdfWidth = doc.internal.pageSize.getWidth();
+                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+                doc.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                doc.save(`SNIPER_CO_${document.getElementById('m-inv-id').innerText}.pdf`);
+            });
+        }
+
+        function closeModal() {
+            // Save to Log
+            const log = { id: document.getElementById('m-inv-id').innerText, name: document.getElementById('c-name').value, total: document.getElementById('m-total').innerText };
+            history.unshift(log);
+            localStorage.setItem('sniper_logs', JSON.stringify(history.slice(0,5)));
+            
+            // Clear Cart completely for new customer
+            cart = [];
+            localStorage.removeItem('active_cart');
+            updateCart();
+            renderHistory();
+            document.getElementById('modal').classList.add('hidden');
+            document.getElementById('c-name').value = "";
+            document.getElementById('c-phone').value = "";
+        }
+
+        function renderHistory() {
+            document.getElementById('history-list').innerHTML = history.map(h => `
+                <div class="bg-zinc-900/50 p-2 rounded border border-zinc-800 flex justify-between">
+                    <span>${h.name}</span>
+                    <span class="text-green-600 font-bold">${h.total}</span>
+                </div>
+            `).join('');
+        }
+
+        init();
+    </script>
+</body>
+</html>
